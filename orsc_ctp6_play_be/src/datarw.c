@@ -19,6 +19,8 @@
 #include "xio.h"
 #include "addr.h"
 #include "flashled.h"
+#include "xspi.h"
+#include "flash_utils.h"
 
 #define UARTLITE_DEVICE_ID      XPAR_UARTLITE_0_DEVICE_ID
 #define INTC_DEVICE_ID          XPAR_INTC_0_DEVICE_ID
@@ -30,6 +32,7 @@
 /************************** Variable Definitions *****************************/
 
 XUartLite UartLite;            /* The instance of the UartLite Device */
+extern XSpi SpiDevice;
 
 XIntc InterruptController;     /* The instance of the Interrupt Controller */
 
@@ -117,7 +120,7 @@ inline void playback(int cbytes, int btidx)
 }
 
 
-int SetupInterruptSystem(XUartLite *UartLitePtr);
+int SetupInterruptSystem();
 
 void SendHandler(void *CallBackRef, unsigned int EventData) 
 {
@@ -178,16 +181,20 @@ int main(void) {
     LOG_ERROR ("Error: self test failed\n");
       return XST_FAILURE;
   }
+  
+  SpiFlashInitializePreInterrupt();
 
   /*
    * Connect the UartLite to the interrupt subsystem such that interrupts can
    * occur. This function is application specific.
    */
-  Status = SetupInterruptSystem(&UartLite);
+  Status = SetupInterruptSystem();
   if (Status != XST_SUCCESS) {
     LOG_ERROR ("Error: could not setup interrupts\n");
       return XST_FAILURE;
   }
+  
+  SpiFlashInitializePostInterrupt();
 
   /*
    * Setup the handlers for the UartLite that will be called from the
@@ -197,6 +204,8 @@ int main(void) {
    */
   XUartLite_SetSendHandler(&UartLite, SendHandler, &UartLite);
   XUartLite_SetRecvHandler(&UartLite, RecvHandler, &UartLite);
+  
+  XSpi_SetStatusHandler(&SpiDevice, &SpiDevice, (XSpi_StatusHandler)SpiHandler);
 
   /*
    * Enable the interrupt of the UartLite so that interrupts will occur.
@@ -278,7 +287,7 @@ int main(void) {
   }
 }
 
-int SetupInterruptSystem(XUartLite *UartLitePtr) {
+int SetupInterruptSystem() {
 
   int Status;
 
@@ -300,11 +309,17 @@ int SetupInterruptSystem(XUartLite *UartLitePtr) {
    */
   Status = XIntc_Connect(&InterruptController, UARTLITE_INT_IRQ_ID,
       (XInterruptHandler)XUartLite_InterruptHandler,
-      (void *)UartLitePtr);
+      (void *)(&UartLite));
   if (Status != XST_SUCCESS) {
     return XST_FAILURE;
   }
 
+  Status = XIntc_Connect(
+    &InterruptController,
+    XPAR_INTC_0_SPI_0_VEC_ID,
+    (XInterruptHandler)XSpi_InterruptHandler,
+    (void*)(&SpiDevice));
+  if(Status != XST_SUCCESS) return Status;
 
   /*
    * Start the interrupt controller such that interrupts are enabled for
@@ -320,6 +335,7 @@ int SetupInterruptSystem(XUartLite *UartLitePtr) {
    * Enable the interrupt for the UartLite device.
    */
   XIntc_Enable(&InterruptController, UARTLITE_INT_IRQ_ID);
+  XIntc_Enable(&InterruptController, XPAR_INTC_0_SPI_0_VEC_ID);
 
   /*
    * Initialize the exception table.
