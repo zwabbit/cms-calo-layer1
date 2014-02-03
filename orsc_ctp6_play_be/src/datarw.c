@@ -282,6 +282,9 @@ int main(void) {
       xil_printf("XST_SUCCESS \n\r");
       XIo_Out32(REG1_ADDR, 0x0);
     }
+
+    while(XIo_In32(REG1_ADDR) == 0x0004) {
+    }
       
 
   }

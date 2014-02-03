@@ -4,6 +4,7 @@
 #include "xintc.h"
 #include "xspi.h"
 #include "xil_exception.h"
+#include "xio.h"
 
 #define WRSR_INSTR     0x01   //write status reg
 #define PP_INSTR       0x02   //page program
@@ -59,19 +60,54 @@ int SpiFlashWriteEnable()
   return SpiFlashWaitOperation();
 }
 
-int SpiFlashWrite(u32 Address, u8 *Data, u32 ByteCount)
+int SpiFlashGetStatus()
 {
   int Status;
-  u32 Index;
+
+  WriteBuffer[0] = RDSR_INSTR;
+
+  SpiBusy = TRUE;
+  Status = XSpi_Transfer(&SpiDevice, WriteBuffer, ReadBuffer, FLASH_STATUS_RD_BYTES);
+  if(Status != XST_SUCCESS) return XST_FAILURE;
+
+  return SpiFlashWaitOperation();
+}
+
+int SpiFlashBusyWait()
+{
+  int Status;
+  u8 StatusReg;
+
+  while(1)
+  {
+    Status = SpiFlashGetStatus();
+    if(Status != XST_SUCCESS) return XST_FAILURE;
+
+    StatusReg = ReadBuffer[1];
+    if((StatusReg & FLASH_STATUS_READY) == 0) break;
+  }
+
+  return XST_SUCCESS;
+}
+
+int SpiFlashWrite(u32 Address, u32 ByteCount)
+{
+  int Status;
   
   WriteBuffer[0] = PP_INSTR;
   WriteBuffer[1] = (u8)(Address >> 16);
   WriteBuffer[2] = (u8)(Address >> 8);
   WriteBuffer[3] = (u8)(Address);
   
-  for(Index = 4; Index < ByteCount + FLASH_INSTR_BYTES; ++Index)
-    WriteBuffer[Index] = Data[Index - FLASH_INSTR_BYTES];
+//  for(Index = 4; Index < ByteCount + FLASH_INSTR_BYTES; ++Index)
+//    WriteBuffer[Index] = Data[Index - FLASH_INSTR_BYTES];
   
+  Status = SpiFlashWriteEnable();
+  if(Status != XST_SUCCESS) return Status;
+
+  Status = SpiFlashBusyWait();
+  if(Status != XST_SUCCESS) return Status;
+
   SpiBusy = TRUE;
   Status = XSpi_Transfer(&SpiDevice, WriteBuffer, NULL, ByteCount + FLASH_INSTR_BYTES);
   if(Status != XST_SUCCESS) return XST_FAILURE;
@@ -100,6 +136,12 @@ int SpiFlashEraseDevice()
   int Status;
   
   WriteBuffer[0] = BE_INSTR;
+
+  Status = SpiFlashWriteEnable();
+  if(Status != XST_SUCCESS) return Status;
+
+  Status = SpiFlashBusyWait();
+  if(Status != XST_SUCCESS) return Status;
   
   SpiBusy = TRUE;
   Status = XSpi_Transfer(&SpiDevice, WriteBuffer, NULL, 0x01);
@@ -108,54 +150,64 @@ int SpiFlashEraseDevice()
   return SpiFlashWaitOperation();
 }
 
-int SpiFlashGetStatus()
+int SpiFlashEraseSector(u32 Address)
 {
   int Status;
-  
-  WriteBuffer[0] = RDSR_INSTR;
-  
-  SpiBusy = TRUE;
-  Status = XSpi_Transfer(&SpiDevice, WriteBuffer, ReadBuffer, FLASH_STATUS_RD_BYTES);
-  if(Status != XST_SUCCESS) return XST_FAILURE;
-  
-  return SpiFlashWaitOperation();
-}
 
-int SpiFlashBusyWait()
-{
-  int Status;
-  u8 StatusReg;
-  
-  while(1)
+  WriteBuffer[0] = SE_INSTR;
+  WriteBuffer[1] = (u8)(Address >> 16);
+  WriteBuffer[2] = (u8)(Address >> 8);
+  WriteBuffer[3] = (u8)(Address);
+
+  Status = SpiFlashWriteEnable();
+  if(Status != XST_SUCCESS) return Status;
+
+  Status = SpiFlashBusyWait();
+  if(Status != XST_SUCCESS) return Status;
+
+  SpiBusy = TRUE;
+  Status = XSpi_Transfer(&SpiDevice, WriteBuffer, NULL, FLASH_INSTR_BYTES);
+  if(Status != XST_SUCCESS) return Status;
+
+  while(SpiBusy);
+  if(ErrorCount != 0)
   {
-    Status = SpiFlashGetStatus();
-    if(Status != XST_SUCCESS) return XST_FAILURE;
-    
-    StatusReg = ReadBuffer[1];
-    if((StatusReg & FLASH_STATUS_READY) == 0) break;
+    ErrorCount = 0;
+    return XST_FAILURE;
   }
-  
+
   return XST_SUCCESS;
 }
 
-int SpiWriteImage(u8 *Image, u32 ByteCount)
+int SpiFlashWritePage(u32 BramBaseAddress, u32 FlashBaseAddress, u32 ByteCount)
 {
   int Status;
+  u32 Index;
+  u8 *DataValue;
+
+  if(ByteCount >= FLASH_PAGE_SIZE) return XST_FAILURE;
   
   Status = SpiFlashWriteEnable();
   if(Status != XST_SUCCESS) return Status;
   
+//  Status = SpiFlashBusyWait();
+//  if(Status != XST_SUCCESS) return Status;
+  
+//  Status = SpiFlashEraseDevice();
+//  if(Status != XST_SUCCESS) return Status;
+  
   Status = SpiFlashBusyWait();
   if(Status != XST_SUCCESS) return Status;
   
-  Status = SpiFlashEraseDevice();
-  if(Status != XST_SUCCESS) return Status;
-  
-  Status = SpiFlashBusyWait();
-  if(Status != XST_SUCCESS) return Status;
-  
-  Status = SpiFlashWriteEnable();
-  if(Status != XST_SUCCESS) return Status;
+  for(Index = 0; Index < ByteCount; Index += 2)
+  {
+    DataValue = (u8*)&(XIo_In16(BramBaseAddress + Index));
+    WriteBuffer[Index + FLASH_INSTR_BYTES] = DataValue[0];
+    WriteBuffer[Index + FLASH_INSTR_BYTES + 1] = DataValue[1];
+
+    Status = SpiFlashWrite(FlashBaseAddress + Index, ByteCount);
+    if(Status != XST_SUCCESS) return Status;
+  }
 
   return XST_SUCCESS;
 }
