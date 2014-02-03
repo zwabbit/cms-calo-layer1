@@ -21,6 +21,7 @@
 #include "flashled.h"
 #include "xspi.h"
 #include "flash_utils.h"
+#include "ecl_config.h"
 
 #define UARTLITE_DEVICE_ID      XPAR_UARTLITE_0_DEVICE_ID
 #define INTC_DEVICE_ID          XPAR_INTC_0_DEVICE_ID
