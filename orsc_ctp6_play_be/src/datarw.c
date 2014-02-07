@@ -136,7 +136,8 @@ void RecvHandler(void *CallBackRef, unsigned int EventData)
 }
 
 int main(void) {
-
+  int flash_erased = FALSE;
+  int flash_written = FALSE;
   /* setvbuf(stdout, NULL, _IONBF, 0);  */
 
   XIo_Out32(0x10008044,0x1);  // UnReset Clock A
@@ -284,10 +285,29 @@ int main(void) {
       XIo_Out32(REG1_ADDR, 0x0);
     }
 
-    while(XIo_In32(REG1_ADDR) == 0x0004) {
+    while(XIo_In32(REG1_ADDR) == 0x0004) { /* Erase flash */
+      if(flash_erased) break;
+      flash_erased = TRUE;
+      flash_written = FALSE;
+      SpiFlashErase();
     }
-      
 
+    while(XIo_In32(REG1_ADDR) == 0x0005) { /* Signal flash write ready */
+      flash_written = FALSE;
+    }
+
+    while(XIo_In32(REG1_ADDR) == 0x0006) { /* Write flash */
+      u32 flash_base_address;
+      u32 flash_data_size;
+
+      if(flash_written) break;
+      flash_erased = FALSE;
+      flash_written = TRUE;
+      flash_base_address = XIo_In32(REG2_ADDR);
+      flash_data_size = XIo_In32(REG3_ADDR);
+      SpiFlashWritePage(0, flash_base_address, flash_data_size);
+    }
+    
   }
 }
 

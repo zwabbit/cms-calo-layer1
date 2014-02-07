@@ -205,9 +205,10 @@ int SpiFlashWritePage(u32 BramBaseAddress, u32 FlashBaseAddress, u32 ByteCount)
     WriteBuffer[Index + FLASH_INSTR_BYTES] = DataValue[0];
     WriteBuffer[Index + FLASH_INSTR_BYTES + 1] = DataValue[1];
 
-    Status = SpiFlashWrite(FlashBaseAddress + Index, ByteCount);
-    if(Status != XST_SUCCESS) return Status;
   }
+
+  Status = SpiFlashWrite(FlashBaseAddress + Index, ByteCount);
+  if(Status != XST_SUCCESS) return Status;
 
   return XST_SUCCESS;
 }
@@ -230,8 +231,8 @@ void SpiHandler(void *CallBackRef, u32 StatusEvent, unsigned int ByteCount)
   SpiBusy = FALSE;
   
   if (StatusEvent != XST_SPI_TRANSFER_DONE) {
-		ErrorCount++;
-	}
+    ErrorCount++;
+  }
 }
 
 int SpiFlashInitializePreInterrupt()
