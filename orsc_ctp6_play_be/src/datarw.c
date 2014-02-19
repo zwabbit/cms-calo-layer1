@@ -289,7 +289,7 @@ int main(void) {
       if(flash_erased) break;
       flash_erased = TRUE;
       flash_written = FALSE;
-      SpiFlashErase();
+      SpiFlashEraseDevice();
     }
 
     while(XIo_In32(REG1_ADDR) == 0x0005) { /* Signal flash write ready */
@@ -308,6 +308,13 @@ int main(void) {
       SpiFlashWritePage(0, flash_base_address, flash_data_size);
     }
     
+    while(XIo_In32(REG1_ADDR) == 0x0007) { /* Write flash */
+      if(flash_written) break;
+      if(SpiFlashTest() != XST_SUCCESS)
+        xil_printf("SPI flash test failed\n\r");
+      else
+        xil_printf("SPI flash test succeeded\n\r");
+    }
   }
 }
 

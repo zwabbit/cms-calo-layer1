@@ -5,3 +5,4 @@ int SpiFlashInitializePreInterrupt();
 int SpiFlashInitializePostInterrupt();
 void SpiHandler(void *CallBackRef, u32 StatusEvent, unsigned int ByteCount);
 int SpiFlashEraseDevice();
+int SpiFlashTest();

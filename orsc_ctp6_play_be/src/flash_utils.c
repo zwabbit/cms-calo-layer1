@@ -25,6 +25,8 @@
 //Doublecheck this value
 #define STM_SPI_SELECT 0x01
 
+#define TEST_ADDRESS 0x800000
+
 XSpi SpiDevice;
 
 static u8 WriteBuffer[FLASH_PAGE_SIZE + FLASH_INSTR_BYTES];
@@ -212,6 +214,7 @@ int SpiFlashWritePage(u32 BramBaseAddress, u32 FlashBaseAddress, u32 ByteCount)
 
   return XST_SUCCESS;
 }
+
 /*
 static int SpiFlashInterruptSetup(XIntc *InterruptController)
 {
@@ -240,7 +243,7 @@ int SpiFlashInitializePreInterrupt()
   XSpi_Config *ConfigPtr = NULL;
   int Status;
   
-  ConfigPtr = XSpi_LookupConfig(XPAR_SPI_0_DEVICE_ID);
+  ConfigPtr = XSpi_LookupConfig(XPAR_SPI_CONFIGFLASH_DEVICE_ID);
   if(ConfigPtr == NULL) return XST_DEVICE_NOT_FOUND;
   
   Status = XSpi_CfgInitialize(&SpiDevice, ConfigPtr, ConfigPtr->BaseAddress);
@@ -263,5 +266,38 @@ int SpiFlashInitializePostInterrupt()
   
   XSpi_Start(&SpiDevice);
   
+  return XST_SUCCESS;
+}
+
+int SpiFlashTest()
+{
+  int Index;
+  int Status;
+
+  Status = SpiFlashEraseSector(TEST_ADDRESS);
+  if(Status != XST_SUCCESS) return XST_FAILURE;
+
+  for(Index = FLASH_INSTR_BYTES; Index < FLASH_PAGE_SIZE + FLASH_INSTR_BYTES; ++Index)
+  {
+    WriteBuffer[Index] = Index - FLASH_INSTR_BYTES;
+  }
+
+  Status = SpiFlashWrite(TEST_ADDRESS, FLASH_PAGE_SIZE);
+  if(Status != XST_SUCCESS) return XST_FAILURE;
+
+  for(Index = 0; Index < FLASH_PAGE_SIZE + FLASH_INSTR_BYTES; ++Index)
+  {
+    ReadBuffer[Index] = 0x00;
+  }
+
+  Status = SpiFlashRead(TEST_ADDRESS, FLASH_PAGE_SIZE);
+  if(Status != XST_SUCCESS) return XST_FAILURE;
+
+  for(Index = FLASH_INSTR_BYTES; Index < FLASH_PAGE_SIZE + FLASH_INSTR_BYTES; ++Index)
+  {
+    if(WriteBuffer[Index] != ReadBuffer[Index])
+      return XST_FAILURE;
+  }
+
   return XST_SUCCESS;
 }
